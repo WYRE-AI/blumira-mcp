@@ -52,6 +52,7 @@ jobs:
     permissions:
       contents: write
       issues: write
+      packages: write
     outputs:
       version: ${{ steps.version.outputs.version }}
       released: ${{ steps.version.outputs.released }}
@@ -156,11 +157,11 @@ jobs:
           push: true
           tags: |
             ghcr.io/wyre-technology/blumira-mcp:latest
-            ghcr.io/wyre-technology/blumira-mcp:v${{ steps.version.outputs.version }}
+            ghcr.io/wyre-technology/blumira-mcp:v${{ needs.release.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VERSION=${{ steps.version.outputs.version }}
+            VERSION=${{ needs.release.outputs.version }}
             COMMIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
@@ -196,7 +197,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
-          VERSION="${{ steps.release-version.outputs.version }}"
+          VERSION="${{ needs.release.outputs.version }}"
           BODY=$(gh release view "v$VERSION" --json body --jq '.body' 2>/dev/null || echo "")
           SUMMARY=$(echo "$BODY" | sed '1,2d' | head -30 | cut -c1-1800)
           PAYLOAD=$(jq -n \
