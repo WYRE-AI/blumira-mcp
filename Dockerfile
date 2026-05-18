@@ -53,7 +53,9 @@ ENV AUTH_MODE=env
 
 VOLUME ["/app/logs"]
 
-CMD ["node", "dist/index.js"]
+# Run the HTTP server when MCP_TRANSPORT=http (gateway/container deployment),
+# otherwise fall back to the stdio entrypoint (local/MCPB usage).
+CMD ["sh", "-c", "if [ \"$MCP_TRANSPORT\" = \"http\" ]; then exec node dist/http.js; else exec node dist/index.js; fi"]
 
 LABEL maintainer="engineering@wyre.ai"
 LABEL version="${VERSION}"

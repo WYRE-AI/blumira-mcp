@@ -25,14 +25,15 @@ function startHttpServer(): void {
   const httpServer = createHttpServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
-    if (url.pathname === '/health') {
-      const creds = getCredentials();
-      const statusCode = creds ? 200 : 503;
-      res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    // Shallow, unauthenticated liveness probe. Always 200 while the process is
+    // up — in gateway mode credentials arrive per-request via headers, so a
+    // credential-gated status would wrongly fail the Azure liveness probe.
+    if (url.pathname === '/health' || url.pathname === '/healthz') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        status: creds ? 'ok' : 'degraded',
+        status: 'ok',
         transport: 'http',
-        credentials: { configured: !!creds },
+        credentials: { configured: !!getCredentials() },
         timestamp: new Date().toISOString(),
       }));
       return;
@@ -40,7 +41,7 @@ function startHttpServer(): void {
 
     if (url.pathname !== '/mcp') {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found', endpoints: ['/mcp', '/health'] }));
+      res.end(JSON.stringify({ error: 'Not found', endpoints: ['/mcp', '/health', '/healthz'] }));
       return;
     }
 
