@@ -1,3 +1,24 @@
+## [Unreleased]
+
+### Fixed
+
+- Container crashed on startup with `ERR_MODULE_NOT_FOUND: Cannot find package
+  '@wyre-technology/node-blumira'`. The dependency was declared as a local
+  `file:../node-blumira` path that does not exist inside the Docker build,
+  so `npm ci` never installed it. Switched to the published registry version
+  `^1.0.1` (`@wyre-technology/node-blumira@1.0.1` now ships its compiled
+  `dist/` output; `1.0.0` did not).
+- Docker `CMD` now starts the HTTP server (`dist/http.js`) when
+  `MCP_TRANSPORT=http`, instead of always running the stdio entrypoint
+  (`dist/index.js`). The stdio entrypoint never opens a listening socket,
+  so the container exited immediately in gateway/ACA deployments and the
+  liveness probe could never succeed.
+- `/health` (and new `/healthz`) liveness endpoints now always return `200`
+  while the process is up. Previously `/health` returned `503` when no
+  env-based credentials were present, which wrongly failed the Azure
+  Container Apps liveness probe in gateway mode (credentials arrive
+  per-request via headers).
+
 ## [1.1.1](https://github.com/wyre-technology/blumira-mcp/compare/v1.1.0...v1.1.1) (2026-04-07)
 
 
