@@ -35,6 +35,11 @@ COPY --from=builder /app/node_modules ./node_modules
 
 RUN npm prune --omit=dev && npm cache clean --force
 
+# Remove the bundled npm CLI from the production image (after the prune/cache
+# steps above, which need it); the runtime only needs node, and npm's bundled
+# dependencies trigger Trivy base-image CVE alerts.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 RUN mkdir -p /app/logs && chown -R blumira:blumira /app
 
 USER blumira
