@@ -48,7 +48,7 @@ jobs:
         run: npm test
       
       - name: Test Docker build
-        run: docker build -t blumira-mcp:test .
+        run: docker build --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} -t blumira-mcp:test .
 
   code-quality:
     name: Code Quality
