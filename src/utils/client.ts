@@ -1,8 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { BlumiraClient } from '@wyre-technology/node-blumira';
 import { logger } from './logger.js';
-
-let _client: BlumiraClient | null = null;
-let _credKey: string | null = null;
 
 // --- OAuth2 token cache ---
 interface CachedToken {
@@ -10,6 +8,9 @@ interface CachedToken {
   expiresAt: number; // epoch ms
 }
 
+// Keyed by `${clientId}:${clientSecret}`, so it never mixes tenants. Safe to
+// keep at module scope: it only ever returns the token for the exact credential
+// pair that was exchanged, never a foreign tenant's token.
 const tokenCache = new Map<string, CachedToken>();
 
 /**
@@ -58,60 +59,95 @@ export async function exchangeOAuthToken(
   return data.access_token;
 }
 
-// ---- Credentials resolution ----
+// ---- Request-scoped credential store ----
+//
+// SECURITY-CRITICAL: in gateway mode the HTTP layer runs each request inside
+// runWithCredentials({...}); getCredentials()/getClient() read from that context.
+// Credentials must NEVER be stashed in module-level mutable state (process.env or
+// a cached client singleton): under concurrent multi-tenant requests the event
+// loop interleaves across await points, so a shared slot lets one tenant's token
+// be read by another tenant's tool call. The AsyncLocalStorage context is the
+// only per-request credential carrier. Falls back to process.env for stdio /
+// single-tenant mode.
 
-interface Credentials {
-  jwtToken: string;
+export interface Credentials {
+  jwtToken?: string;
+  clientId?: string;
+  clientSecret?: string;
 }
 
+const credStore = new AsyncLocalStorage<Credentials>();
+
+export function runWithCredentials<T>(creds: Credentials, fn: () => T): T {
+  return credStore.run(creds, fn);
+}
+
+// Sentinel returned by getCredentials() when OAuth client credentials are present
+// but the JWT has not been exchanged yet. Lets health/status report "configured"
+// without performing the async exchange. getClient() never treats it as a token.
+const OAUTH_PENDING = '__oauth_pending__';
+
 /**
- * Resolve credentials in priority order:
- * 1. Direct JWT token (BLUMIRA_JWT_TOKEN)
- * 2. OAuth client credentials (BLUMIRA_CLIENT_ID + BLUMIRA_CLIENT_SECRET) — performs exchange
+ * Resolve credentials for health/status signaling.
+ *
+ * Priority: request-scoped store (gateway mode) → process.env (stdio mode).
+ * Returns `{ jwtToken }` where jwtToken is either a real token or the
+ * OAUTH_PENDING sentinel (client credentials present, not yet exchanged), or
+ * null when no credentials are configured.
  */
-export function getCredentials(): Credentials | null {
+export function getCredentials(): { jwtToken: string } | null {
+  const scoped = credStore.getStore();
+  if (scoped) {
+    if (scoped.jwtToken) return { jwtToken: scoped.jwtToken };
+    if (scoped.clientId && scoped.clientSecret) return { jwtToken: OAUTH_PENDING };
+  }
+
   const jwtToken = process.env.BLUMIRA_JWT_TOKEN;
   if (jwtToken) {
     return { jwtToken };
   }
 
-  // If client_id + client_secret are set, we can obtain a token —
-  // but the exchange is async, so we signal "credentials available" and
-  // the actual exchange happens in getClient().
   const clientId = process.env.BLUMIRA_CLIENT_ID;
   const clientSecret = process.env.BLUMIRA_CLIENT_SECRET;
   if (clientId && clientSecret) {
-    // Return a sentinel so health checks know we have credentials configured.
-    // The real token will be fetched in getClient().
-    return { jwtToken: '__oauth_pending__' };
+    // Signal "credentials available"; the real token is fetched in getClient().
+    return { jwtToken: OAUTH_PENDING };
   }
 
   logger.warn('Missing credentials', { hasJwtToken: false, hasClientId: !!clientId });
   return null;
 }
 
+/**
+ * Build a Blumira API client from the effective credential source.
+ *
+ * A fresh client is constructed on every call (construction is cheap — config
+ * only, no connection) so concurrent tenants never share a client instance.
+ * Request-scoped credentials win; otherwise fall back to process.env for
+ * stdio / single-tenant mode. The two sources are never mixed.
+ */
 export async function getClient(): Promise<BlumiraClient> {
+  const scoped = credStore.getStore();
+  const source: Credentials =
+    scoped && (scoped.jwtToken || (scoped.clientId && scoped.clientSecret))
+      ? scoped
+      : {
+          jwtToken: process.env.BLUMIRA_JWT_TOKEN,
+          clientId: process.env.BLUMIRA_CLIENT_ID,
+          clientSecret: process.env.BLUMIRA_CLIENT_SECRET,
+        };
+
   // Direct JWT path
-  const jwtToken = process.env.BLUMIRA_JWT_TOKEN;
-  if (jwtToken) {
-    if (_client && _credKey === jwtToken) return _client;
-    _client = new BlumiraClient({ jwtToken });
-    _credKey = jwtToken;
+  if (source.jwtToken && source.jwtToken !== OAUTH_PENDING) {
     logger.info('Created Blumira API client (JWT)');
-    return _client;
+    return new BlumiraClient({ jwtToken: source.jwtToken });
   }
 
   // OAuth client credentials path
-  const clientId = process.env.BLUMIRA_CLIENT_ID;
-  const clientSecret = process.env.BLUMIRA_CLIENT_SECRET;
-  if (clientId && clientSecret) {
-    const token = await exchangeOAuthToken(clientId, clientSecret);
-    const credKey = `oauth:${clientId}:${token}`;
-    if (_client && _credKey === credKey) return _client;
-    _client = new BlumiraClient({ jwtToken: token });
-    _credKey = credKey;
+  if (source.clientId && source.clientSecret) {
+    const token = await exchangeOAuthToken(source.clientId, source.clientSecret);
     logger.info('Created Blumira API client (OAuth)');
-    return _client;
+    return new BlumiraClient({ jwtToken: token });
   }
 
   throw new Error(
