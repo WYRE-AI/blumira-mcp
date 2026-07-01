@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock the SDK before importing client
+// Mock the SDK before importing client.
+// Use a class expression so `new BlumiraClient(...)` works in tests that call getClient().
 vi.mock('@wyre-technology/node-blumira', () => ({
-  BlumiraClient: vi.fn().mockImplementation(() => ({})),
+  BlumiraClient: vi.fn().mockImplementation(function () { return {}; }),
 }));
 
-import { exchangeOAuthToken, getCredentials, runWithCredentials } from '../utils/client.js';
+import { BlumiraClient } from '@wyre-technology/node-blumira';
+import { exchangeOAuthToken, getCredentials, runWithCredentials, getClient } from '../utils/client.js';
+import { elicitCredentials } from '../elicitation/forms.js';
 
 // Store original env values
 const origJwt = process.env.BLUMIRA_JWT_TOKEN;
@@ -104,50 +107,54 @@ describe('concurrent ALS isolation', () => {
   });
 });
 
-describe('elicitation credential scope', () => {
-  it('elicitCredentials throw does not write to process.env', async () => {
-    const mockServer = {
-      elicitInput: vi.fn().mockRejectedValue(new Error('Elicitation not supported')),
+// Fix 1: Drive the REAL elicitCredentials from forms.ts — not an inline copy.
+// These tests detect process.env mutations introduced back into the call chain.
+describe('elicitation credential scope (real elicitCredentials)', () => {
+  it('Test A: elicitInput throws → elicitCredentials returns null, no process.env mutation', async () => {
+    const fakeServer = {
+      elicitInput: vi.fn().mockRejectedValue(new Error('not supported')),
     };
 
-    // Replicate the elicitCredentials try/catch pattern from forms.ts
-    let elicited: { jwtToken?: string; clientId?: string; clientSecret?: string } | null = null;
-    try {
-      const res = await (mockServer as any).elicitInput({
-        mode: 'form',
-        message: 'credentials',
-        requestedSchema: { type: 'object', properties: {}, required: [] },
-      });
-      if (res?.action === 'accept' && res.content) {
-        elicited = { jwtToken: res.content.jwt_token };
-      }
-    } catch {
-      // fail-open: elicited remains null
-    }
+    // Call the REAL exported function — not a copy
+    const result = await elicitCredentials(fakeServer as any);
 
-    expect(elicited).toBeNull();
-    // CRITICAL: process.env must NOT have been mutated
+    expect(result).toBeNull();
+    // If any code in the call chain wrote to process.env, these would catch it
     expect(process.env.BLUMIRA_JWT_TOKEN).toBeUndefined();
     expect(process.env.BLUMIRA_CLIENT_ID).toBeUndefined();
     expect(process.env.BLUMIRA_CLIENT_SECRET).toBeUndefined();
   });
 
-  it('elicitCredentials decline does not write to process.env', async () => {
-    const mockServer = {
+  it('Test B: elicitInput resolves with decline → elicitCredentials returns null, no process.env mutation', async () => {
+    const fakeServer = {
       elicitInput: vi.fn().mockResolvedValue({ action: 'decline', content: null }),
     };
 
-    const res = await (mockServer as any).elicitInput({ mode: 'form', message: 'creds', requestedSchema: {} });
+    const result = await elicitCredentials(fakeServer as any);
 
-    // Simulate the old buggy pattern to confirm it would write — then confirm we don't
-    let wouldWrite = false;
-    if (res?.action === 'accept' && res?.content?.jwt_token) {
-      wouldWrite = true;
-      // In the old code: process.env.BLUMIRA_JWT_TOKEN = res.content.jwt_token;
-    }
-
-    expect(wouldWrite).toBe(false);
+    expect(result).toBeNull();
     expect(process.env.BLUMIRA_JWT_TOKEN).toBeUndefined();
+    expect(process.env.BLUMIRA_CLIENT_ID).toBeUndefined();
+    expect(process.env.BLUMIRA_CLIENT_SECRET).toBeUndefined();
+  });
+
+  it('Test C: elicitInput accept with jwt_token → elicitCredentials returns value, process.env STILL unset', async () => {
+    const fakeServer = {
+      elicitInput: vi.fn().mockResolvedValue({
+        action: 'accept',
+        content: { jwt_token: 'elicited-jwt' },
+      }),
+    };
+
+    const result = await elicitCredentials(fakeServer as any);
+
+    // The real function DOES return the elicited value
+    expect(result).toEqual({ jwtToken: 'elicited-jwt' });
+    // But elicitCredentials itself must NEVER write to process.env
+    // (the env-write bug was in the OLD server.ts caller, now removed)
+    expect(process.env.BLUMIRA_JWT_TOKEN).toBeUndefined();
+    expect(process.env.BLUMIRA_CLIENT_ID).toBeUndefined();
+    expect(process.env.BLUMIRA_CLIENT_SECRET).toBeUndefined();
   });
 });
 
@@ -199,5 +206,36 @@ describe('exchangeOAuthToken', () => {
 
     await expect(exchangeOAuthToken('bad-id-x2', 'bad-secret-x2'))
       .rejects.toThrow('OAuth token exchange failed (401): Unauthorized');
+  });
+});
+
+// Fix 3: getClient() reads ALS-scoped credentials, not env
+describe('getClient() reads ALS-scoped credentials', () => {
+  it('uses ALS-scoped jwtToken to construct BlumiraClient', async () => {
+    vi.mocked(BlumiraClient).mockClear();
+
+    await runWithCredentials({ clientId: '', clientSecret: '', jwtToken: 'scoped-jwt' }, async () => {
+      await getClient();
+    });
+
+    expect(vi.mocked(BlumiraClient)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(BlumiraClient)).toHaveBeenCalledWith({ jwtToken: 'scoped-jwt' });
+  });
+
+  it('uses ALS-scoped OAuth creds to exchange token then construct BlumiraClient', async () => {
+    vi.mocked(BlumiraClient).mockClear();
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'exchanged-token', expires_in: 3600 }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await runWithCredentials({ clientId: 'cid', clientSecret: 'csec', jwtToken: '' }, async () => {
+      await getClient();
+    });
+
+    expect(vi.mocked(BlumiraClient)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(BlumiraClient)).toHaveBeenCalledWith({ jwtToken: 'exchanged-token' });
   });
 });
