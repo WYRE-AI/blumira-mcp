@@ -1,21 +1,9 @@
 import { createServer as createHttpServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { createServer } from './server.js';
-import { getCredentials, exchangeOAuthToken } from './utils/client.js';
+import { getCredentials, runWithCredentials, exchangeOAuthToken } from './utils/client.js';
+import type { Credentials } from './utils/client.js';
 import { logger } from './utils/logger.js';
-
-const transports: Record<string, StreamableHTTPServerTransport> = {};
-
-function readBody(req: import('node:http').IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString()));
-    req.on('error', reject);
-  });
-}
 
 function startHttpServer(): void {
   const port = parseInt(process.env.MCP_HTTP_PORT || '8080', 10);
@@ -45,104 +33,59 @@ function startHttpServer(): void {
       return;
     }
 
+    if (req.method !== 'POST') {
+      res.writeHead(405).end();
+      return;
+    }
+
+    const handle = async () => {
+      const server = createServer();
+      // SECURITY-CRITICAL invariant: this transport MUST stay stateless
+      // (sessionIdGenerator: undefined + enableJsonResponse: true). Per-request
+      // tenant credentials are carried in an AsyncLocalStorage context opened by
+      // runWithCredentials() below. A stateless request->single-response flow
+      // keeps the tool call inside that context. Switching to a stateful/SSE
+      // transport (sessionIdGenerator set, persistent stream) would let a
+      // long-lived connection serve later messages under a stale/foreign
+      // credential context — re-review tenant isolation before changing this.
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+      res.on('close', () => { transport.close(); server.close(); });
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+    };
+
     if (isGatewayMode) {
-      // Support new OAuth headers (preferred) and legacy JWT header
-      const clientId = req.headers['x-blumira-client-id'] as string;
-      const clientSecret = req.headers['x-blumira-client-secret'] as string;
-      const jwtToken = req.headers['x-blumira-jwt-token'] as string;
+      // Support OAuth headers (preferred) and legacy JWT header
+      const clientId = (req.headers['x-blumira-client-id'] as string) || '';
+      const clientSecret = (req.headers['x-blumira-client-secret'] as string) || '';
+      const jwtToken = (req.headers['x-blumira-jwt-token'] as string) || '';
 
       if (clientId && clientSecret) {
+        // Validate credentials eagerly — fail fast with 401 on bad creds
         try {
-          const token = await exchangeOAuthToken(clientId, clientSecret);
-          process.env.BLUMIRA_JWT_TOKEN = token;
-          // Also store for OAuth-aware path in client.ts
-          process.env.BLUMIRA_CLIENT_ID = clientId;
-          process.env.BLUMIRA_CLIENT_SECRET = clientSecret;
+          await exchangeOAuthToken(clientId, clientSecret);
         } catch (err) {
           logger.error('OAuth token exchange failed', { error: (err as Error).message });
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'OAuth token exchange failed', detail: (err as Error).message }));
           return;
         }
+        const creds: Credentials = { clientId, clientSecret, jwtToken: '' };
+        await runWithCredentials(creds, handle);
       } else if (jwtToken) {
-        process.env.BLUMIRA_JWT_TOKEN = jwtToken;
+        const creds: Credentials = { clientId: '', clientSecret: '', jwtToken };
+        await runWithCredentials(creds, handle);
+      } else {
+        // No credentials provided — allow tools/list and initialize (unauthenticated discovery);
+        // individual tool calls will fail when they invoke getClient().
+        await handle();
       }
-      // Allow unauthenticated tools/list — credentials checked only when tools are called
+    } else {
+      await handle();
     }
-
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
-
-    if (req.method === 'POST') {
-      const body = await readBody(req);
-      const parsed = JSON.parse(body);
-
-      // Allow initialize and tools/list without credentials (unauthenticated discovery)
-      const isUnauthMethod = !Array.isArray(parsed) &&
-        (parsed?.method === 'tools/list' || parsed?.method === 'initialize');
-      if (isGatewayMode && !isUnauthMethod) {
-        const creds = getCredentials();
-        if (!creds) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            error: 'Missing credentials',
-            detail: 'Provide X-Blumira-Client-ID + X-Blumira-Client-Secret or X-Blumira-JWT-Token headers',
-          }));
-          return;
-        }
-      }
-
-      if (sessionId && transports[sessionId]) {
-        await transports[sessionId].handleRequest(req, res, parsed);
-        return;
-      }
-
-      if (!sessionId && isInitializeRequest(parsed)) {
-        const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          enableJsonResponse: true,
-          onsessioninitialized: (sid) => { transports[sid] = transport; },
-        });
-        transport.onclose = () => {
-          const sid = transport.sessionId;
-          if (sid) delete transports[sid];
-        };
-
-        const server = createServer();
-        await server.connect(transport);
-        await transport.handleRequest(req, res, parsed);
-        return;
-      }
-
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32000, message: 'Bad Request: missing or invalid session' },
-        id: null,
-      }));
-      return;
-    }
-
-    if (req.method === 'GET') {
-      if (!sessionId || !transports[sessionId]) {
-        res.writeHead(400, { 'Content-Type': 'text/plain' });
-        res.end('Invalid or missing session ID');
-        return;
-      }
-      await transports[sessionId].handleRequest(req, res);
-      return;
-    }
-
-    if (req.method === 'DELETE') {
-      if (!sessionId || !transports[sessionId]) {
-        res.writeHead(400, { 'Content-Type': 'text/plain' });
-        res.end('Invalid or missing session ID');
-        return;
-      }
-      await transports[sessionId].handleRequest(req, res);
-      return;
-    }
-
-    res.writeHead(405).end();
   });
 
   httpServer.listen(port, host, () => {
