@@ -49,20 +49,20 @@ export function createServer(): Server {
 
       // Check credentials before navigating
       if (!getCredentials()) {
-        const creds = await elicitCredentials(server);
-        if (creds) {
-          if (creds.jwtToken) {
-            process.env.BLUMIRA_JWT_TOKEN = creds.jwtToken;
-          } else if (creds.clientId && creds.clientSecret) {
-            process.env.BLUMIRA_CLIENT_ID = creds.clientId;
-            process.env.BLUMIRA_CLIENT_SECRET = creds.clientSecret;
-          }
-        } else {
+        const elicited = await elicitCredentials(server);
+        if (!elicited) {
           return {
-            content: [{ type: 'text' as const, text: 'Blumira credentials are required. Set BLUMIRA_JWT_TOKEN or BLUMIRA_CLIENT_ID + BLUMIRA_CLIENT_SECRET.' }],
+            content: [{ type: 'text' as const, text: 'Blumira credentials are required. Provide X-Blumira-Client-ID + X-Blumira-Client-Secret or X-Blumira-JWT-Token headers (HTTP gateway), or set BLUMIRA_JWT_TOKEN / BLUMIRA_CLIENT_ID + BLUMIRA_CLIENT_SECRET environment variables (stdio).' }],
             isError: true,
           };
         }
+        // Elicitation succeeded (stdio mode only). Credentials cannot be injected
+        // into the current request scope without writing to process.env, which is
+        // a race condition in concurrent use. Instruct the user to set env vars.
+        return {
+          content: [{ type: 'text' as const, text: 'Credentials received but cannot be applied to the current request. Set BLUMIRA_JWT_TOKEN or BLUMIRA_CLIENT_ID + BLUMIRA_CLIENT_SECRET environment variables and reconnect.' }],
+          isError: true,
+        };
       }
 
       state.currentDomain = domain;
