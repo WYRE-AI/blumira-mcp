@@ -35,7 +35,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@wyre-technology/node-blumira": "^1.0.1"
+    "@wyre-technology/node-blumira": "^1.0.2"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^2.1.2",
