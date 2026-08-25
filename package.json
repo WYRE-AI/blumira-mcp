@@ -1,5 +1,5 @@
 {
-  "name": "blumira-mcp",
+  "name": "@wyre-ai/blumira-mcp",
   "version": "1.1.2",
   "description": "MCP server for Blumira SIEM integration",
   "type": "module",

@@ -136,8 +136,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/wyre-technology/blumira-mcp:latest
-            ghcr.io/wyre-technology/blumira-mcp:v${{ steps.version.outputs.version }}
+            ghcr.io/wyre-ai/blumira-mcp:latest
+            ghcr.io/wyre-ai/blumira-mcp:v${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -201,7 +201,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'ghcr.io/wyre-technology/blumira-mcp:latest'
+          image-ref: 'ghcr.io/wyre-ai/blumira-mcp:latest'
           format: 'sarif'
           output: 'trivy-results.sarif'
 
