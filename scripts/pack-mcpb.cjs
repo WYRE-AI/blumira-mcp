@@ -70,7 +70,10 @@ try {
   run('find node_modules -type f \\( -name "*.map" -o -name "CHANGELOG*" -o -name "HISTORY*" -o -name "CONTRIBUTING*" -o -name ".eslintrc*" \\) -delete 2>/dev/null || true', { cwd: STAGING });
 
   console.log('\n=== Packing MCPB bundle ===');
-  const bundlePath = join(ROOT, `${pkg.name}.mcpb`);
+  // Use the unscoped name: "@wyre-ai/blumira-mcp" must produce
+  // blumira-mcp.mcpb at the repo root, not @wyre-ai/blumira-mcp.mcpb.
+  const bundleName = pkg.name.includes('/') ? pkg.name.split('/').pop() : pkg.name;
+  const bundlePath = join(ROOT, `${bundleName}.mcpb`);
   run(`npx mcpb pack "${STAGING}" "${bundlePath}"`, { cwd: ROOT });
 
   console.log('\n=== Cleanup ===');
@@ -79,7 +82,7 @@ try {
   console.log('\n=== Done! ===');
   if (existsSync(bundlePath)) {
     const stats = require('fs').statSync(bundlePath);
-    console.log(`Bundle: ${pkg.name}.mcpb (${(stats.size / 1024 / 1024).toFixed(1)}MB)`);
+    console.log(`Bundle: ${bundleName}.mcpb (${(stats.size / 1024 / 1024).toFixed(1)}MB)`);
   }
 } catch (error) {
   console.error('Pack failed:', error.message);
