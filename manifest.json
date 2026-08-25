@@ -7,13 +7,13 @@
   "long_description": "Provides AI assistants with structured access to your Blumira SIEM data. Search and manage security findings, monitor agents, list users, and handle MSP multi-account operations through the Model Context Protocol. Features decision-tree navigation, dual transport (stdio + HTTP streaming), and comprehensive error handling.",
   "author": {
     "name": "WYRE Technology",
-    "url": "https://github.com/wyre-technology"
+    "url": "https://github.com/WYRE-AI"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/wyre-technology/blumira-mcp"
+    "url": "https://github.com/WYRE-AI/blumira-mcp"
   },
-  "homepage": "https://github.com/wyre-technology/blumira-mcp",
+  "homepage": "https://github.com/WYRE-AI/blumira-mcp",
   "license": "Apache-2.0",
   "keywords": ["blumira", "siem", "msp", "security", "mcp"],
   "server": {

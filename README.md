@@ -1,18 +1,18 @@
 # Blumira MCP Server
 
-[![Build Status](https://github.com/wyre-technology/blumira-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/wyre-technology/blumira-mcp/actions/workflows/release.yml)
+[![Build Status](https://github.com/WYRE-AI/blumira-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/WYRE-AI/blumira-mcp/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides AI assistants with structured access to [Blumira](https://blumira.com) SIEM platform data and operations.
 
-> **Note:** This project is maintained by [Wyre Technology](https://github.com/wyre-technology).
+> **Note:** This project is maintained by [Wyre Technology](https://github.com/WYRE-AI).
 
 ## Quick Start
 
 **Claude Desktop** — download, open, done:
 
-1. Download `blumira-mcp.mcpb` from the [latest release](https://github.com/wyre-technology/blumira-mcp/releases/latest)
+1. Download `blumira-mcp.mcpb` from the [latest release](https://github.com/WYRE-AI/blumira-mcp/releases/latest)
 2. Open the file (double-click or drag into Claude Desktop)
 3. Enter your Blumira JWT token when prompted
 
@@ -23,7 +23,7 @@ No terminal, no JSON editing, no Node.js install required.
 ```bash
 claude mcp add blumira-mcp \
   -e BLUMIRA_JWT_TOKEN=your-jwt-token \
-  -- npx -y github:wyre-technology/blumira-mcp
+  -- npx -y github:WYRE-AI/blumira-mcp
 ```
 
 See [Installation](#installation) for Docker and from-source methods.
@@ -47,7 +47,7 @@ See [Installation](#installation) for Docker and from-source methods.
 
 The simplest method — no terminal, no JSON editing, no Node.js install required.
 
-1. Download `blumira-mcp.mcpb` from the [latest release](https://github.com/wyre-technology/blumira-mcp/releases/latest)
+1. Download `blumira-mcp.mcpb` from the [latest release](https://github.com/WYRE-AI/blumira-mcp/releases/latest)
 2. Open the file (double-click or drag into Claude Desktop)
 3. Enter your Blumira JWT token when prompted
 
@@ -56,7 +56,7 @@ For **Claude Code (CLI)**, one command:
 ```bash
 claude mcp add blumira-mcp \
   -e BLUMIRA_JWT_TOKEN=your-jwt-token \
-  -- npx -y github:wyre-technology/blumira-mcp
+  -- npx -y github:WYRE-AI/blumira-mcp
 ```
 
 ### Option 2: Docker
@@ -71,13 +71,13 @@ Or pull the pre-built image:
 docker run -d \
   -e BLUMIRA_JWT_TOKEN=your-token \
   -p 8080:8080 \
-  ghcr.io/wyre-technology/blumira-mcp:latest
+  ghcr.io/wyre-ai/blumira-mcp:latest
 ```
 
 ### Option 3: From Source
 
 ```bash
-git clone https://github.com/wyre-technology/blumira-mcp.git
+git clone https://github.com/WYRE-AI/blumira-mcp.git
 cd blumira-mcp
 npm ci
 npm run build
