@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+### Tests
+
+- Added invocation tests for every domain handler (`findings`, `agents`,
+  `users`, `resolutions`, `msp`). Previously only navigation/state, OAuth,
+  and the S2S/statelessness guards were tested — each tool's `handleCall`
+  (request-shaping into the Blumira client and response mapping) was never
+  actually invoked. Tests mock `getClient()` and assert the outbound call
+  shape and returned `CallToolResult` for every tool, plus the unknown-tool
+  error branch. 39 -> 78 tests; no source changes.
+
 ### Fixed
 
 - Container crashed on startup with `ERR_MODULE_NOT_FOUND: Cannot find package
