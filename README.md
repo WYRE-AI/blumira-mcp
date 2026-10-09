@@ -65,14 +65,20 @@ claude mcp add blumira-mcp \
 docker compose up
 ```
 
+Compose will not start until `CONDUIT_S2S_SECRET` is set. See [Docker Deployment](#docker-deployment).
+
 Or pull the pre-built image:
 
 ```bash
 docker run -d \
+  -e CONDUIT_S2S_SECRET=your-s2s-secret \
   -e BLUMIRA_JWT_TOKEN=your-token \
-  -p 8080:8080 \
+  -e AUTH_MODE=env \
+  -p 127.0.0.1:8080:8080 \
   ghcr.io/wyre-ai/blumira-mcp:latest
 ```
+
+The image defaults to `AUTH_MODE=gateway` and binds `0.0.0.0` inside the container. HTTP startup refuses to run unless `CONDUIT_S2S_SECRET` is set. Publish the port on `127.0.0.1` (as above). In gateway mode, send vendor credentials on each `/mcp` request (`X-Blumira-Client-ID` + `X-Blumira-Client-Secret`, or `X-Blumira-JWT-Token`); the server does not fall back to environment credentials. Set `AUTH_MODE=env` only for a single-tenant container that should use `BLUMIRA_JWT_TOKEN`.
 
 ### Option 3: From Source
 
@@ -87,11 +93,16 @@ npm run build
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `BLUMIRA_JWT_TOKEN` | JWT token for authentication | — |
+| `BLUMIRA_JWT_TOKEN` | JWT token for authentication (stdio and `AUTH_MODE=env`) | — |
 | `MCP_TRANSPORT` | Transport mode (`stdio` or `http`) | `stdio` |
 | `MCP_HTTP_PORT` | HTTP server port | `8080` |
-| `AUTH_MODE` | Auth mode (`env` or `gateway`) | `env` |
+| `MCP_HTTP_HOST` | Interface the HTTP server binds | `127.0.0.1` |
+| `CONDUIT_S2S_SECRET` | Required for HTTP. HMAC secret checked against `X-Gateway-S2S` on `/mcp`. If empty, the HTTP server logs an error and exits non-zero. The value is never logged. | — |
+| `MCP_ALLOW_INSECURE_DEV` | Set to `1` to start HTTP without `CONDUIT_S2S_SECRET`. Logs a warning and does not enforce S2S. Local development only. | unset |
+| `AUTH_MODE` | `env` uses process environment credentials (stdio and single-tenant HTTP). `gateway` requires per-request vendor headers and never falls back to the environment. The Docker image and Compose file default to `gateway`. | `env` when unset; `gateway` in Docker and Compose |
 | `LOG_LEVEL` | Log level (`debug`, `info`, `warn`, `error`) | `info` |
+
+`/health` and `/healthz` stay unauthenticated and do not read credentials. The stdio transport does not use `CONDUIT_S2S_SECRET`.
 
 ## Domains
 
@@ -121,11 +132,11 @@ Pass filters as tool input parameters — the server handles query string constr
 
 ## Docker Deployment
 
-Copy `.env.example` to `.env` and fill in your credentials:
+Copy `.env.example` to `.env` and fill in your credentials, including `CONDUIT_S2S_SECRET`. Compose will not start if that variable is missing, and it publishes the HTTP port on `127.0.0.1` only.
 
 ```bash
 cp .env.example .env
-# Edit .env with your Blumira JWT token
+# Edit .env with your Blumira JWT token and CONDUIT_S2S_SECRET
 docker compose up -d
 ```
 
