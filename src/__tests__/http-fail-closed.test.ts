@@ -172,6 +172,123 @@ describe('HTTP startup fails closed without CONDUIT_S2S_SECRET', () => {
     const health = await fetch(`http://127.0.0.1:${DEV_PORT}/health`);
     expect(health.status).toBe(200);
   });
+
+  it('refuses a known placeholder secret and does not log it', async () => {
+    process.env.CONDUIT_S2S_SECRET = 'replace-with-a-real-secret';
+    delete process.env.MCP_ALLOW_INSECURE_DEV;
+    process.env.MCP_TRANSPORT = 'http';
+    process.env.MCP_HTTP_PORT = '47114';
+    process.env.MCP_HTTP_HOST = '127.0.0.1';
+    process.env.LOG_LEVEL = 'error';
+
+    const captured = captureConsoleError();
+    const exit = exitSpy();
+    try {
+      await expect(loadHttpModule()).rejects.toThrow('process.exit:1');
+      expect(exit).toHaveBeenCalledWith(1);
+      const logged = captured.lines.join('\n');
+      expect(logged).toContain('known placeholder');
+      expect(logged).toContain('openssl rand -hex 32');
+      expect(logged).not.toContain('replace-with-a-real-secret');
+    } finally {
+      captured.restore();
+      exit.mockRestore();
+    }
+
+    await expect(fetch('http://127.0.0.1:47114/health')).rejects.toThrow();
+  });
+
+  it('refuses a placeholder even when MCP_ALLOW_INSECURE_DEV=1', async () => {
+    process.env.CONDUIT_S2S_SECRET = '  Your-S2S-Secret  ';
+    process.env.MCP_ALLOW_INSECURE_DEV = '1';
+    process.env.MCP_TRANSPORT = 'http';
+    process.env.MCP_HTTP_PORT = '47115';
+    process.env.MCP_HTTP_HOST = '127.0.0.1';
+    process.env.LOG_LEVEL = 'error';
+
+    const captured = captureConsoleError();
+    const exit = exitSpy();
+    try {
+      await expect(loadHttpModule()).rejects.toThrow('process.exit:1');
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(captured.lines.join('\n')).not.toContain('Your-S2S-Secret');
+    } finally {
+      captured.restore();
+      exit.mockRestore();
+    }
+  });
+
+  it('forces 127.0.0.1 when insecure dev is set and the host is loopback or unset', async () => {
+    delete process.env.CONDUIT_S2S_SECRET;
+    process.env.MCP_ALLOW_INSECURE_DEV = '1';
+    process.env.MCP_TRANSPORT = 'http';
+    process.env.AUTH_MODE = 'gateway';
+    process.env.MCP_HTTP_PORT = '47116';
+    process.env.MCP_HTTP_HOST = 'localhost';
+    process.env.LOG_LEVEL = 'info';
+
+    const captured = captureConsoleError();
+    const exit = exitSpy();
+    try {
+      await loadHttpModule();
+      await waitForServer(47116);
+      expect(exit).not.toHaveBeenCalled();
+      const logged = captured.lines.join('\n');
+      expect(logged).toContain('HTTP streaming server listening on 127.0.0.1:47116');
+      expect(logged).not.toContain('listening on localhost');
+    } finally {
+      captured.restore();
+      exit.mockRestore();
+    }
+  });
+
+  it('refuses insecure dev when MCP_HTTP_HOST is not loopback', async () => {
+    delete process.env.CONDUIT_S2S_SECRET;
+    process.env.MCP_ALLOW_INSECURE_DEV = '1';
+    process.env.MCP_TRANSPORT = 'http';
+    process.env.MCP_HTTP_PORT = '47117';
+    process.env.MCP_HTTP_HOST = '0.0.0.0';
+    process.env.LOG_LEVEL = 'error';
+
+    const captured = captureConsoleError();
+    const exit = exitSpy();
+    try {
+      await expect(loadHttpModule()).rejects.toThrow('process.exit:1');
+      expect(exit).toHaveBeenCalledWith(1);
+      const logged = captured.lines.join('\n');
+      expect(logged).toContain('only binds 127.0.0.1');
+      expect(logged).not.toContain(TEST_SECRET);
+    } finally {
+      captured.restore();
+      exit.mockRestore();
+    }
+
+    await expect(fetch('http://127.0.0.1:47117/health')).rejects.toThrow();
+  });
+
+  it('still honors a non-loopback host when a real secret is set', async () => {
+    process.env.CONDUIT_S2S_SECRET = TEST_SECRET;
+    delete process.env.MCP_ALLOW_INSECURE_DEV;
+    process.env.MCP_TRANSPORT = 'http';
+    process.env.AUTH_MODE = 'gateway';
+    process.env.MCP_HTTP_PORT = '47118';
+    process.env.MCP_HTTP_HOST = '0.0.0.0';
+    process.env.LOG_LEVEL = 'info';
+
+    const captured = captureConsoleError();
+    const exit = exitSpy();
+    try {
+      await loadHttpModule();
+      await waitForServer(47118);
+      expect(exit).not.toHaveBeenCalled();
+      const logged = captured.lines.join('\n');
+      expect(logged).toContain('HTTP streaming server listening on 0.0.0.0:47118');
+      expect(logged).not.toContain(TEST_SECRET);
+    } finally {
+      captured.restore();
+      exit.mockRestore();
+    }
+  });
 });
 
 describe('gateway /mcp auth', () => {

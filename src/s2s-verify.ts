@@ -15,8 +15,10 @@
  * secret it's handed.
  *
  * Empty secret => always returns false. HTTP startup refuses to boot when
- * CONDUIT_S2S_SECRET is empty unless MCP_ALLOW_INSECURE_DEV=1 (see http.ts).
- * Do not treat an empty secret as "enforcement disabled" on a reachable port.
+ * CONDUIT_S2S_SECRET is empty unless MCP_ALLOW_INSECURE_DEV=1, and that
+ * bypass binds 127.0.0.1 only. A known placeholder secret always refuses
+ * to start (see http.ts). Do not treat an empty secret as "enforcement
+ * disabled" on a reachable port.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 
