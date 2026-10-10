@@ -55,8 +55,12 @@ ENV NODE_ENV=production
 ENV LOG_LEVEL=info
 ENV MCP_TRANSPORT=http
 ENV MCP_HTTP_PORT=8080
+# All interfaces inside the container. Startup still fails closed unless
+# CONDUIT_S2S_SECRET is a real secret. MCP_ALLOW_INSECURE_DEV=1 refuses to
+# start while this host is 0.0.0.0; that bypass only binds 127.0.0.1.
 ENV MCP_HTTP_HOST=0.0.0.0
-ENV AUTH_MODE=env
+# Gateway mode reads vendor credentials from request headers only.
+ENV AUTH_MODE=gateway
 
 VOLUME ["/app/logs"]
 
