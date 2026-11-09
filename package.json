@@ -34,8 +34,8 @@
   "author": "WYRE Technology",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.0",
-    "@wyre-technology/node-blumira": "^1.0.1"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@wyre-technology/node-blumira": "^1.0.2"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^2.1.2",
