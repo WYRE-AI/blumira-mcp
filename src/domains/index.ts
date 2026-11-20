@@ -1,42 +1,25 @@
-import type { DomainName, DomainHandler } from '../utils/types.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { DomainHandler, DomainName } from '../utils/types.js';
+import { findingsHandler } from './findings.js';
+import { agentsHandler } from './agents.js';
+import { usersHandler } from './users.js';
+import { mspHandler } from './msp.js';
+import { resolutionsHandler } from './resolutions.js';
 
-const domainCache = new Map<DomainName, DomainHandler>();
+export const HANDLERS: Record<DomainName, DomainHandler> = {
+  findings: findingsHandler,
+  agents: agentsHandler,
+  users: usersHandler,
+  msp: mspHandler,
+  resolutions: resolutionsHandler,
+};
 
-export async function getDomainHandler(domain: DomainName): Promise<DomainHandler> {
-  const cached = domainCache.get(domain);
-  if (cached) return cached;
+/** Every domain tool, flat. Served by tools/list with no navigation step. */
+export function getAllTools(): Tool[] {
+  return Object.values(HANDLERS).flatMap(h => h.getTools());
+}
 
-  let handler: DomainHandler;
-  switch (domain) {
-    case 'findings': {
-      const { findingsHandler } = await import('./findings.js');
-      handler = findingsHandler;
-      break;
-    }
-    case 'agents': {
-      const { agentsHandler } = await import('./agents.js');
-      handler = agentsHandler;
-      break;
-    }
-    case 'users': {
-      const { usersHandler } = await import('./users.js');
-      handler = usersHandler;
-      break;
-    }
-    case 'msp': {
-      const { mspHandler } = await import('./msp.js');
-      handler = mspHandler;
-      break;
-    }
-    case 'resolutions': {
-      const { resolutionsHandler } = await import('./resolutions.js');
-      handler = resolutionsHandler;
-      break;
-    }
-    default:
-      throw new Error(`Unknown domain: ${domain}`);
-  }
-
-  domainCache.set(domain, handler);
-  return handler;
+/** Resolve the handler that owns a tool name, or undefined if none does. */
+export function getHandlerForTool(toolName: string): DomainHandler | undefined {
+  return Object.values(HANDLERS).find(h => h.getTools().some(t => t.name === toolName));
 }

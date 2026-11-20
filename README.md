@@ -32,7 +32,7 @@ See [Installation](#installation) for Docker and from-source methods.
 
 - **🔌 MCP Protocol Compliance**: Full support for MCP resources and tools
 - **🛡️ Comprehensive SIEM Coverage**: Tools spanning findings, agents/devices, users, resolutions, and MSP account management
-- **🔍 Decision-Tree Navigation**: Start with `blumira_navigate` to explore domains, then dynamically load domain-specific tools
+- **🔍 Flat Tool List**: All 27 domain tools plus `blumira_status` are listed on a fresh session, with no navigation step
 - **🏢 MSP Multi-Tenant Support**: Full MSP endpoint coverage for managing findings, agents, and users across accounts
 - **🔒 Secure Authentication**: JWT token or API key (`pax8ApiTokenV1`) authentication
 - **🌐 Dual Transport**: Supports both stdio (local) and HTTP Streamable (remote/Docker) transports
@@ -123,7 +123,7 @@ npm run build
 
 ## Domains
 
-The server uses decision-tree navigation. Start with `blumira_navigate` to pick a domain:
+Every tool is listed up front by `tools/list`; there is no navigation step. `blumira_status` reports the connection state and the tools grouped by domain:
 
 | Domain | Tools |
 |--------|-------|
