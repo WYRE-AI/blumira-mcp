@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+### Changed
+
+- `tools/list` now returns every tool (27 domain tools plus `blumira_status`) on
+  a fresh session. Previously only the navigation tools were listed until
+  `blumira_navigate` was called, and Conduit refuses to list or proxy
+  `_navigate`, so the domain tools were unreachable behind the gateway
+  (WYREAI-757). Domain tools are routed by name with no navigation state.
+- `blumira_status` now reports the tool surface by domain instead of the
+  current navigation domain.
+
+### Removed
+
+- `blumira_navigate` and `blumira_back`, and the per-session navigation state.
+
 ### Tests
 
 - Added invocation tests for every domain handler (`findings`, `agents`,

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "display_name": "Blumira MCP Server",
   "description": "MCP server for Blumira SIEM — manage findings, agents, users, and MSP accounts through AI assistants",
-  "long_description": "Provides AI assistants with structured access to your Blumira SIEM data. Search and manage security findings, monitor agents, list users, and handle MSP multi-account operations through the Model Context Protocol. Features decision-tree navigation, dual transport (stdio + HTTP streaming), and comprehensive error handling.",
+  "long_description": "Provides AI assistants with structured access to your Blumira SIEM data. Search and manage security findings, monitor agents, list users, and handle MSP multi-account operations through the Model Context Protocol. Lists every tool up front, with dual transport (stdio + HTTP streaming), and comprehensive error handling.",
   "author": {
     "name": "WYRE Technology",
     "url": "https://github.com/WYRE-AI"
